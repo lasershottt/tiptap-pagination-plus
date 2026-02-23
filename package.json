@@ -12,7 +12,8 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "tsc",
-    "watch": "tsc-watch --onSuccess \"echo 'Build completed'\""
+    "watch": "tsc-watch --onSuccess \"echo 'Build completed'\"",
+    "prepare": "npm run build"
   },
   "keywords": [
     "tiptap",
@@ -46,5 +47,8 @@
   "peerDependencies": {
     "@tiptap/core": "^2.0.0 || ^3.0.0",
     "@tiptap/pm": "^2.0.0 || ^3.0.0"
+  },
+  "volta": {
+    "node": "22.21.1"
   }
 }

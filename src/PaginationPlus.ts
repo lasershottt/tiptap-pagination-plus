@@ -38,6 +38,8 @@ export interface PaginationPlusStorage extends PaginationPlusOptions {
 const page_count_meta_key = "PAGE_COUNT_META_KEY";
 const footer_height_meta_key = "FOOTER_HEIGHT_META_KEY";
 
+const optionsPerEditor = new WeakMap<Editor, PaginationPlusOptions>();
+
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
     PaginationPlus: {
@@ -135,7 +137,7 @@ export const PaginationPlus = Extension.create<PaginationPlusOptions, Pagination
     targetNode.style.paddingRight = `var(--rm-margin-right)`;
     targetNode.style.width = `var(--rm-page-width)`;
 
-    updateCssVariables(targetNode, this.options);
+    updateCssVariables(targetNode, optionsPerEditor.get(this.editor)!);
 
     const style = document.createElement("style");
     style.dataset.rmPaginationStyle = "";
@@ -267,22 +269,23 @@ export const PaginationPlus = Extension.create<PaginationPlusOptions, Pagination
           init: (_, state) => {
             const widgetList = createDecoration(this.options, new Map(), new Map());
             this.storage = { ...this.options, headerHeight: new Map(), footerHeight: new Map() };
-
+            optionsPerEditor.set(editor, this.options);
             return {
               decorations : DecorationSet.create(state.doc, widgetList),
             };
           },
           apply: (tr, oldDeco, oldState, newState) => {
-            const pageCount = calculatePageCount(editor.view, this.options);
+            const options = optionsPerEditor.get(editor)!;
+            const pageCount = calculatePageCount(editor.view, options);
             const currentPageCount = getExistingPageCount(editor.view);
 
             const getNewDecoration = () => {
-              updateCssVariables(editor.view.dom, this.options);
+              updateCssVariables(editor.view.dom, options);
               let headerHeight = "headerHeight" in this.storage ? this.storage.headerHeight : new Map();
               let footerHeight = "footerHeight" in this.storage ? this.storage.footerHeight : new Map();
 
-              const widgetList = createDecoration(this.options, headerHeight, footerHeight);
-              this.storage = { ...this.options, headerHeight, footerHeight };
+              const widgetList = createDecoration(options, headerHeight, footerHeight);
+              this.storage = { ...options, headerHeight, footerHeight };
               return {
                 decorations : DecorationSet.create(newState.doc, [...widgetList]),
                 footerHeight
@@ -292,22 +295,22 @@ export const PaginationPlus = Extension.create<PaginationPlusOptions, Pagination
 
             if (
               (pageCount > 1 ? pageCount : 1) !== currentPageCount ||
-              this.storage.pageBreakBackground !== this.options.pageBreakBackground ||
-              this.storage.pageHeight !== this.options.pageHeight ||
-              this.storage.pageWidth !== this.options.pageWidth ||
-              this.storage.marginTop !== this.options.marginTop ||
-              this.storage.marginBottom !== this.options.marginBottom ||
-              this.storage.marginLeft !== this.options.marginLeft ||
-              this.storage.marginRight !== this.options.marginRight ||
-              this.storage.pageGap !== this.options.pageGap ||
-              this.storage.contentMarginTop !== this.options.contentMarginTop ||
-              this.storage.contentMarginBottom !== this.options.contentMarginBottom ||
-              this.storage.headerLeft !== this.options.headerLeft ||
-              this.storage.headerRight !== this.options.headerRight ||
-              this.storage.footerLeft !== this.options.footerLeft ||
-              this.storage.footerRight !== this.options.footerRight ||
-              !deepEqualIterative(this.options.customHeader, this.storage.customHeader) ||
-              !deepEqualIterative(this.options.customFooter, this.storage.customFooter)
+              this.storage.pageBreakBackground !== options.pageBreakBackground ||
+              this.storage.pageHeight !== options.pageHeight ||
+              this.storage.pageWidth !== options.pageWidth ||
+              this.storage.marginTop !== options.marginTop ||
+              this.storage.marginBottom !== options.marginBottom ||
+              this.storage.marginLeft !== options.marginLeft ||
+              this.storage.marginRight !== options.marginRight ||
+              this.storage.pageGap !== options.pageGap ||
+              this.storage.contentMarginTop !== options.contentMarginTop ||
+              this.storage.contentMarginBottom !== options.contentMarginBottom ||
+              this.storage.headerLeft !== options.headerLeft ||
+              this.storage.headerRight !== options.headerRight ||
+              this.storage.footerLeft !== options.footerLeft ||
+              this.storage.footerRight !== options.footerRight ||
+              !deepEqualIterative(options.customHeader, this.storage.customHeader) ||
+              !deepEqualIterative(options.customFooter, this.storage.customFooter)
             ) {
               return getNewDecoration();
             }
@@ -325,7 +328,7 @@ export const PaginationPlus = Extension.create<PaginationPlusOptions, Pagination
         view: (editorView: EditorView) => {
           return {
             update: (view : EditorView) => {
-                const pageCount = calculatePageCount(view, this.options);
+                const pageCount = calculatePageCount(view, optionsPerEditor.get(editor)!);
                 const currentPageCount = getExistingPageCount(view);
                 
                 const triggerUpdate = (_footerHeight?: FooterHeightMap) => {
@@ -340,8 +343,8 @@ export const PaginationPlus = Extension.create<PaginationPlusOptions, Pagination
                   return;
                 }
 
-                const headerHeight = getHeaderHeight(view.dom, getCustomPages(this.options.customHeader, {}), "content");
-                const footerHeight = getFooterHeight(view.dom, getCustomPages({}, this.options.customFooter), "content");
+                const headerHeight = getHeaderHeight(view.dom, getCustomPages(optionsPerEditor.get(editor)!.customHeader, {}), "content");
+                const footerHeight = getFooterHeight(view.dom, getCustomPages({}, optionsPerEditor.get(editor)!.customFooter), "content");
 
                 const footerHeightForCurrentPages = new Map<PageNumber, number>();
                 for(let i = 0; i <= pageCount; i++) {
@@ -382,7 +385,7 @@ export const PaginationPlus = Extension.create<PaginationPlusOptions, Pagination
                   
                   const headerHeight = headerHeightForCurrentPages.has(page) ? headerHeightForCurrentPages.get(page) || 0 : headerHeightForCurrentPages.get(0) || 0;
                   const footerHeight = footerHeightForCurrentPages.has(page) ? footerHeightForCurrentPages.get(page) || 0 : footerHeightForCurrentPages.get(0) || 0;
-                  const { _pageHeaderHeight, _pageHeight } = getHeight(this.options, headerHeight, footerHeight);
+                  const { _pageHeaderHeight, _pageHeight } = getHeight(optionsPerEditor.get(editor)!, headerHeight, footerHeight);
                   
                   const contentHeight = page === 1 ? _pageHeight + _pageHeaderHeight : _pageHeight;
                   if(page === 1) {
@@ -447,57 +450,57 @@ export const PaginationPlus = Extension.create<PaginationPlusOptions, Pagination
   addCommands() {
     return {
       updatePageBreakBackground: (color: string) => () => {
-        this.options.pageBreakBackground = color;
+        optionsPerEditor.get(this.editor)!.pageBreakBackground = color;
         return true;
       },
       updatePageSize: (size: PageSize) => () => {
-        this.options.pageHeight = size.pageHeight;
-        this.options.pageWidth = size.pageWidth;
-        this.options.marginTop = size.marginTop;
-        this.options.marginBottom = size.marginBottom;
-        this.options.marginLeft = size.marginLeft;
-        this.options.marginRight = size.marginRight;
+        optionsPerEditor.get(this.editor)!.pageHeight = size.pageHeight;
+        optionsPerEditor.get(this.editor)!.pageWidth = size.pageWidth;
+        optionsPerEditor.get(this.editor)!.marginTop = size.marginTop;
+        optionsPerEditor.get(this.editor)!.marginBottom = size.marginBottom;
+        optionsPerEditor.get(this.editor)!.marginLeft = size.marginLeft;
+        optionsPerEditor.get(this.editor)!.marginRight = size.marginRight;
         return true;
       },
       updatePageWidth: (width: number) => () => {
-        this.options.pageWidth = width;
+        optionsPerEditor.get(this.editor)!.pageWidth = width;
         return true;
       },
       updatePageHeight: (height: number) => () => {
-        this.options.pageHeight = height;
+        optionsPerEditor.get(this.editor)!.pageHeight = height;
         return true;
       },
       updatePageGap: (gap: number) => () => {
-        this.options.pageGap = gap;
+        optionsPerEditor.get(this.editor)!.pageGap = gap;
         return true;
       },
       updateMargins: (margins: { top: number, bottom: number, left: number, right: number }) => () => {
-        this.options.marginTop = margins.top;
-        this.options.marginBottom = margins.bottom;
-        this.options.marginLeft = margins.left;
-        this.options.marginRight = margins.right;
+        optionsPerEditor.get(this.editor)!.marginTop = margins.top;
+        optionsPerEditor.get(this.editor)!.marginBottom = margins.bottom;
+        optionsPerEditor.get(this.editor)!.marginLeft = margins.left;
+        optionsPerEditor.get(this.editor)!.marginRight = margins.right;
         return true;
       },
       updateContentMargins: (margins: { top: number, bottom: number }) => () => {
-        this.options.contentMarginTop = margins.top;
-        this.options.contentMarginBottom = margins.bottom;
+        optionsPerEditor.get(this.editor)!.contentMarginTop = margins.top;
+        optionsPerEditor.get(this.editor)!.contentMarginBottom = margins.bottom;
         return true;
       },
       updateHeaderContent: (left: string, right: string, pageNumber?: PageNumber) => () => {
         if(pageNumber) {
-          this.options.customHeader = { ...this.options.customHeader, [pageNumber]: { headerLeft: left, headerRight: right } };
+          optionsPerEditor.get(this.editor)!.customHeader = { ...optionsPerEditor.get(this.editor)!.customHeader, [pageNumber]: { headerLeft: left, headerRight: right } };
         }else{
-          this.options.headerLeft = left;
-          this.options.headerRight = right;
+          optionsPerEditor.get(this.editor)!.headerLeft = left;
+          optionsPerEditor.get(this.editor)!.headerRight = right;
         }
         return true;
       },
       updateFooterContent: (left: string, right: string, pageNumber?: PageNumber) => () => {
         if(pageNumber) {
-          this.options.customFooter = { ...this.options.customFooter, [pageNumber]: { footerLeft: left, footerRight: right } };
+          optionsPerEditor.get(this.editor)!.customFooter = { ...optionsPerEditor.get(this.editor)!.customFooter, [pageNumber]: { footerLeft: left, footerRight: right } };
         }else{
-          this.options.footerLeft = left;
-          this.options.footerRight = right;
+          optionsPerEditor.get(this.editor)!.footerLeft = left;
+          optionsPerEditor.get(this.editor)!.footerRight = right;
         }
         return true;
       },
