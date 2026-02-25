@@ -5,7 +5,8 @@ import { Decoration, DecorationSet, EditorView } from "@tiptap/pm/view";
 import { deepEqualIterative, footerClickEvent, getCustomPages, getFooter, getFooterHeight, getHeader, getHeaderHeight, getHeight, headerClickEvent, updateCssVariables } from "./utils";
 import { PageSize } from "./constants";
 import { HeaderOptions, FooterOptions, PageNumber, HeaderHeightMap, FooterHeightMap, HeaderClickEvent, FooterClickEvent } from "./types";
-import type { Node as PMNode } from 'prosemirror-model';
+import { DOMSerializer, type Node as PMNode} from 'prosemirror-model';
+import { ContentNode, HeaderFooterNode, HeaderFooterOptions } from "./HeaderFooterNode";
 
 
 export interface PaginationPlusOptions {
@@ -119,6 +120,10 @@ const paginationKey = new PluginKey("pagination");
 
 export const PaginationPlus = Extension.create<PaginationPlusOptions, PaginationPlusStorage>({
   name: "PaginationPlus",
+  addExtensions() {
+    return [HeaderFooterOptions, HeaderFooterNode, ContentNode]
+  },
+
   addOptions() {
     return defaultOptions;
   },
@@ -269,7 +274,7 @@ export const PaginationPlus = Extension.create<PaginationPlusOptions, Pagination
           init: (_, state) => {
             const widgetList = createDecoration(this.options, new Map(), new Map());
             this.storage = { ...this.options, headerHeight: new Map(), footerHeight: new Map() };
-            optionsPerEditor.set(editor, this.options);
+            optionsPerEditor.set(editor, structuredClone(this.options));
             return {
               decorations : DecorationSet.create(state.doc, widgetList),
             };
@@ -291,6 +296,53 @@ export const PaginationPlus = Extension.create<PaginationPlusOptions, Pagination
                 footerHeight
               };
             }
+
+            // Reset to default Values in case HeaderOptions node was removed
+            options.headerLeft = this.options.headerLeft
+            options.headerRight = this.options.headerRight
+            options.footerRight = this.options.footerRight
+            options.footerLeft = this.options.footerLeft
+            options.customFooter = structuredClone(this.options.customFooter)
+            options.customHeader = structuredClone(this.options.customHeader)
+
+            // Gather all nodes 
+            newState.doc.descendants((node) => {
+              if (node.type.name === HeaderFooterNode.name) {
+                const left = document.createElement("div");
+                const right = document.createElement("div");
+
+                node.content.forEach((childNode) => {
+                  if (childNode.type.name === ContentNode.name) {
+                    const fragment = DOMSerializer.fromSchema(newState.schema).serializeNode(childNode);
+
+                    if (childNode.attrs.class === "contentLeft") {
+                      left.appendChild(fragment);
+                    }
+                    else if (childNode.attrs.class === "contentRight") {
+                      right.appendChild(fragment);
+                    }
+                  }
+                });
+
+                const position = node.attrs.position as "header"|"footer" 
+                const pageNumber: number = node.attrs.pageNumber
+
+                if(pageNumber && Number(pageNumber) !== -1) {
+                  if (position === "header") {
+                    options.customHeader = { ...options.customHeader, [pageNumber]: {headerLeft: left.innerHTML, headerRight: right.innerHTML} };
+                  } 
+                  else if (position === "footer") {
+                    options.customFooter = { ...options.customFooter, [pageNumber]: {footerLeft: left.innerHTML, footerRight: right.innerHTML} };
+                  }
+                } else {
+                  const contentLeft = position === "header" ? "headerLeft":"footerLeft"
+                  const contentRight = position === "header" ? "headerRight":"footerRight"
+                  options[contentLeft] = left.innerHTML;
+                  options[contentRight] = right.innerHTML;
+                }
+                return false
+              }
+            })
 
 
             if (
@@ -486,23 +538,11 @@ export const PaginationPlus = Extension.create<PaginationPlusOptions, Pagination
         optionsPerEditor.get(this.editor)!.contentMarginBottom = margins.bottom;
         return true;
       },
-      updateHeaderContent: (left: string, right: string, pageNumber?: PageNumber) => () => {
-        if(pageNumber) {
-          optionsPerEditor.get(this.editor)!.customHeader = { ...optionsPerEditor.get(this.editor)!.customHeader, [pageNumber]: { headerLeft: left, headerRight: right } };
-        }else{
-          optionsPerEditor.get(this.editor)!.headerLeft = left;
-          optionsPerEditor.get(this.editor)!.headerRight = right;
-        }
-        return true;
+      updateHeaderContent: (left: string, right: string, pageNumber?: PageNumber) => ({commands, tr}) => {
+        return commands.setHeaderFooterContent({ contentLeft: left, contentRight: right, pageNumber, position: "header", tr });
       },
-      updateFooterContent: (left: string, right: string, pageNumber?: PageNumber) => () => {
-        if(pageNumber) {
-          optionsPerEditor.get(this.editor)!.customFooter = { ...optionsPerEditor.get(this.editor)!.customFooter, [pageNumber]: { footerLeft: left, footerRight: right } };
-        }else{
-          optionsPerEditor.get(this.editor)!.footerLeft = left;
-          optionsPerEditor.get(this.editor)!.footerRight = right;
-        }
-        return true;
+      updateFooterContent: (left: string, right: string, pageNumber?: PageNumber) => ({ commands, tr}) => {
+        return commands.setHeaderFooterContent({ contentLeft: left, contentRight: right, pageNumber, position: "footer", tr });
       },
     };
   },
